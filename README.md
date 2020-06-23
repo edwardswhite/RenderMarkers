@@ -12,6 +12,10 @@ This add-on appends two render options to the Render menu of Blender. The first 
 ## Restrictions
 The Render Markers add-on will not render movie file formats.
 
+## Donations
+This add-on is free to use. If you find it useful, make a purchase of any amount on Gumroad.
+https://gum.co/wrIGs
+
 ## Installation
 In Blender's Edit menu, select "Preferences..." and then choose the Add-ons tab. Press the "Install..." button and select this zip file.
 
