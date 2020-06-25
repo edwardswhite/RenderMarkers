@@ -21,7 +21,7 @@ bl_info = {
     "author": "Edward S. White",
     "description": "Renders only frames with timeline markers",
     "blender": (2, 80, 0),
-    "version": (1, 0, 0),
+    "version": (1, 3, 0),
     "location": "Render Menu > Render Markers",
     "category": "Render"
 }
@@ -41,41 +41,88 @@ class RM_OT_rendermarkers(Operator):
     bl_label = "Render Markers"
     bl_description = "Render images only at timeline marker positions"
 
+    _timer = None
+    scene = None
+    markers = None
+    prevpath = None
+    renderpath = None
+    prevframe = None
+    timeframe = None
+    stop = None
+    rendering = None
+
+    def rmpre(self, dummy, thrd=None):
+        self.rendering = True
+
+    def rmpost(self, context, thrd=None):
+        self.markers.pop(0)
+        if len(self.markers):
+            self.timeframe = self.markers[0].frame
+        else:
+            self.stop = True
+        bpy.context.scene.frame_current = self.timeframe
+        self.rendering = False
+
+    def rmcancel(self, dummy, thrd=None):
+        self.scene.frame_current = self.prevframe
+        self.scene.render.filepath = self.prevpath
+        print("Cancelled")
+        self.stop = True
+
     def execute(self, context):
+
+        bpy.app.handlers.render_pre.append(self.rmpre)
+        bpy.app.handlers.render_post.append(self.rmpost)
+        bpy.app.handlers.render_cancel.append(self.rmcancel)
+
         scene = bpy.context.scene
+        self.scene = scene
         # Save current scene settings
-        prev_timeline = scene.frame_current
-        prev_filepath = scene.render.filepath
-        # Use path from Output Settings
-        render_path = scene.render.filepath
-        animation_formats = ['FFMPEG', 'AVI_JPEG', 'AVI_RAW', 'FRAMESERVER']
-        if scene.render.image_settings.file_format in animation_formats:
-            print("Movie file formats are not supported in Render Markers.")
-            ShowMessageBox("Movie file formats are not supported.",
-                           "Render Images at Markers",
-                           'ERROR')
-            return {"FINISHED"}
+        self.renderpath = scene.render.filepath
+        self.prevpath = scene.render.filepath
+        self.prevframe = scene.frame_current
+        scene.frame_current
         # Get list of all markers in the scene
         mlist = scene.timeline_markers
         # sort markers by time
-        markerlist = sorted(mlist, key=lambda mlist: mlist.frame)
-        # step through markers and render an image
-        for m in markerlist:
-            scene.frame_current = m.frame
-            # set render filepath
-            scene.render.filepath = render_path + "_" + \
-                str(scene.frame_current).zfill(4)
-            bpy.ops.render.render(animation=False,
-                                  write_still=True
-                                  )
-        # Restore previous settings
-        scene.frame_current = prev_timeline
-        scene.render.filepath = prev_filepath
-        ShowMessageBox("Finished Rendering",
-                       "Render Images at Markers",
-                       'INFO')
+        self.markers = sorted(mlist, key=lambda mlist: mlist.frame)
+        self.timeframe = self.markers[0].frame
 
-        return {'FINISHED'}
+        wm = bpy.context.window_manager
+        self._timer = wm.event_timer_add(0.1, window=bpy.context.window)
+        wm.modal_handler_add(self)
+
+        return {'RUNNING_MODAL'}
+
+    def modal(self, context, event):
+
+        if event.type in {'ESC'}:
+            self.rmcancel(context)
+            return {'CANCELLED'}
+
+        if event.type == 'TIMER':
+            if True in (not self.markers, self.stop is True):
+                bpy.app.handlers.render_pre.remove(self.rmpre)
+                bpy.app.handlers.render_post.remove(self.rmpost)
+                bpy.app.handlers.render_cancel.remove(self.rmcancel)
+                bpy.context.window_manager.event_timer_remove(self._timer)
+                bpy.context.scene.frame_current = self.prevframe
+                bpy.context.scene.render.filepath = self.prevpath
+                ShowMessageBox("Finished Rendering",
+                               "Render Images at Markers",
+                               'INFO')
+                return {"FINISHED"}
+
+            elif not self.rendering:
+                scene = bpy.context.scene
+                # render images holding for each marker
+                scene.render.filepath = self.renderpath + "_" + \
+                    str(self.timeframe).zfill(4)
+                bpy.ops.render.render(animation=False,
+                                      write_still=True
+                                      )
+
+        return {'PASS_THROUGH'}
 
     def draw(self, context):
 
@@ -83,16 +130,14 @@ class RM_OT_rendermarkers(Operator):
         row = layout.row()
         row.label(text="Output file location")
 
+        row = layout.row()
+        row.label(text="Press Esc if location is not correct.")
+
         file_path = bpy.context.scene.render.filepath
         box = layout.box()
         row = box.row()
         row.alignment = 'LEFT'
         row.label(text=file_path)
-
-        layout = self.layout
-        row = layout.row()
-        row.alignment = 'CENTER'
-        row.label(text="(Blender may appear to be frozen during render)")
 
     def invoke(self, context, event):
 
@@ -102,6 +147,14 @@ class RM_OT_rendermarkers(Operator):
             print("Movie file formats are not supported in Render Markers.")
             ShowMessageBox("Movie file formats are not supported.",
                            "Render Images at Markers",
+                           'ERROR')
+            return {'FINISHED'}
+        # Get list of all markers in the scene
+        mlist = scene.timeline_markers
+        if not mlist:
+            print("No markers in the current scene.")
+            ShowMessageBox("No markers in the current scene.",
+                           "Viewport Render Images at Markers",
                            'ERROR')
             return {'FINISHED'}
         return context.window_manager.invoke_props_dialog(self)
@@ -113,57 +166,97 @@ class RM_OT_renderanimmarkers(Operator):
     bl_label = "Render Markers"
     bl_description = "Render the same frame until a new marker is reached"
 
+    _timer = None
+    scene = None
+    markers = None
+    renderpath = None
+    prevpath = None
+    prevframe = None
+    timeframe = None
+    totalframe = None
+    stop = None
+    rendering = None
+
+    def rampre(self, dummy, thrd=None):
+        self.rendering = True
+
+    def rampost(self, context, thrd=None):
+        self.timeframe += 1
+        for m in self.markers:  # check if new marker has been reached
+            if self.timeframe == m.frame:
+                bpy.context.scene.frame_current = self.timeframe
+        if self.timeframe > bpy.context.scene.frame_end:
+            self.stop = True
+        self.scene.render.filepath = self.prevpath
+        self.rendering = False
+
+    def ramcancel(self, dummy, thrd=None):
+        self.scene.frame_current = self.prevframe
+        self.scene.render.filepath = self.prevpath
+        print("Cancelled")
+        self.stop = True
+
     def execute(self, context):
 
-        scene = bpy.context.scene
-        # Save current scene settings
-        prev_timeline = scene.frame_current
-        prev_filepath = scene.render.filepath
+        bpy.app.handlers.render_pre.append(self.rampre)
+        bpy.app.handlers.render_post.append(self.rampost)
+        bpy.app.handlers.render_cancel.append(self.ramcancel)
 
+        scene = bpy.context.scene
         # Get list of all markers in the scene
         mlist = scene.timeline_markers
-        if not mlist:
-            print("No markers in current scene.")
-            ShowMessageBox("No markers in current scene.",
-                           "Render Holding on Markers",
-                           'ERROR')
-            return {'FINISHED'}
+        self.markers = sorted(mlist, key=lambda mlist: mlist.frame)
+        self.renderpath = scene.render.filepath
+        self.prevpath = scene.render.filepath
+        self.prevframe = scene.frame_current
+        self.timeframe = scene.frame_start
+        self.totalframe = scene.frame_end - scene.frame_start
+        scene.frame_current = self.timeframe
 
-        # sort markers by time
-        markerlist = sorted(mlist, key=lambda mlist: mlist.frame)
+        wm = bpy.context.window_manager
+        self._timer = wm.event_timer_add(0.1, window=bpy.context.window)
+        wm.modal_handler_add(self)
 
-        # Use path from Output Settings
-        render_path = scene.render.filepath
-        scene.frame_current = scene.frame_start
+        return {"RUNNING_MODAL"}
 
-        movie_formats = ['FFMPEG', 'AVI_JPEG', 'AVI_RAW', 'FRAMESERVER']
-        if not scene.render.image_settings.file_format in movie_formats:
-            # render images holding for each marker
-            for f in range(scene.frame_start, (scene.frame_end + 1)):
-                scene.render.filepath = render_path + "_" + \
-                    str(f).zfill(4)
+    def modal(self, context, event):
+
+        if event.type in {'ESC'}:
+            self.ramcancel(context)
+            return {'CANCELLED'}
+
+        if event.type == 'TIMER':
+            if True in (not self.markers, self.stop is True):
+                bpy.app.handlers.render_pre.remove(self.rampre)
+                bpy.app.handlers.render_post.remove(self.rampost)
+                bpy.app.handlers.render_cancel.remove(self.ramcancel)
+                bpy.context.window_manager.event_timer_remove(self._timer)
+                bpy.context.scene.frame_current = self.prevframe
+                bpy.context.scene.render.filepath = self.prevpath
+                ShowMessageBox("Finished Rendering",
+                               "Render Holding on Markers",
+                               'INFO')
+                return {"FINISHED"}
+
+            elif not self.rendering:
+                scene = bpy.context.scene
+                # render images holding for each marker
+                scene.render.filepath = self.renderpath + "_" + \
+                    str(self.timeframe).zfill(4)
                 bpy.ops.render.render(animation=False,
                                       write_still=True
                                       )
-                # check if new marker has been reached
-                for m in markerlist:
-                    if m.frame == (f + 1):
-                        scene.frame_current = m.frame
 
-        # Restore previous settings
-        scene.frame_current = prev_timeline
-        scene.render.filepath = prev_filepath
-        ShowMessageBox("Finished Rendering",
-                       "Render Holding on Markers",
-                       'INFO')
-
-        return {'FINISHED'}
+        return {'PASS_THROUGH'}
 
     def draw(self, context):
 
         layout = self.layout
         row = layout.row()
-        row.label(text="Output file location")
+        row.label(text="Output File Location")
+
+        row = layout.row()
+        row.label(text="Press Esc if location is not correct.")
 
         file_path = bpy.context.scene.render.filepath
         box = layout.box()
@@ -171,19 +264,24 @@ class RM_OT_renderanimmarkers(Operator):
         row.alignment = 'LEFT'
         row.label(text=file_path)
 
-        layout = self.layout
-        row = layout.row()
-        row.alignment = 'CENTER'
-        row.label(text="(Blender may appear to be frozen during render)")
-
     def invoke(self, context, event):
 
         scene = bpy.context.scene
-        animation_formats = ['FFMPEG', 'AVI_JPEG', 'AVI_RAW', 'FRAMESERVER']
+        self.scene = scene
+        # Check for not a movie format
+        animation_formats = ['FFMPEG', 'AVI_JPEG', 'AVI_RAW']
         if scene.render.image_settings.file_format in animation_formats:
             print("Movie file formats are not supported in Render Markers.")
             ShowMessageBox("Movie file formats are not supported.",
                            "Render Holding on Markers",
+                           'ERROR')
+            return {'FINISHED'}
+        # Get list of all markers in the scene
+        mlist = scene.timeline_markers
+        if not mlist:
+            print("No markers in the current scene.")
+            ShowMessageBox("No markers in the current scene.",
+                           "Viewport Render Images at Markers",
                            'ERROR')
             return {'FINISHED'}
         return context.window_manager.invoke_props_dialog(self)
