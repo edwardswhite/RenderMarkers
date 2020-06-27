@@ -1,0 +1,45 @@
+<h1>Render Markers Blender Add-on</h1>
+<p>This add-on appends two render options to the Render menu of Blender. The first will allow a user to render multiple single frames in one pass by only rendering frames that have markers. The second option will render frames in an animatic style format by rendering the same frame until a new marker is reached. This is somtimes referred to as 'stepped' motion.</p>
+<h2>Features</h2>
+<ul>
+<li>Render only single frames that have markers</li>
+<li>Render the same frame until a new marker is reached</li>
+</ul>
+<h2>Requirements</h2>
+<ul>
+<li>Blender 2.8 or higher</li>
+</ul>
+<h2>Restrictions</h2>
+<p>The Render Markers add-on will not render movie file formats.</p>
+<h2>Donations</h2>
+<p>This add-on is free to use. If you find it useful, make a purchase of any amount on Gumroad.
+https://gum.co/wrIGs</p>
+<h2>Installation</h2>
+<p>In Blender's Edit menu, select &quot;Preferences...&quot; and then choose the Add-ons tab. Press the &quot;Install...&quot; button and select this zip file.</p>
+<h2>How to use</h2>
+<ol>
+<li>Add markers to the timeline</li>
+<li>Choose render method
+<ul>
+<li>Render Images at Markers</li>
+<li>Render Holding on Markers</li>
+</ul>
+</li>
+</ol>
+<h3>Add markers to the timeline</h3>
+<p>This addon will not work unless there are markers in the timeline. Markers can be created anywhere on the timeline. Setting a marker is like setting a keyframe. Move the timeline in the timeline to where a marker is to be set. In the timeline Marker menu, select &quot;Add Marker&quot;.</p>
+<p><img src="timeline-addmarker.png" alt="Add marker in timeline Marker menu"></p>
+<p>A new marker will appear below the timeline. Its name will correspond to the frame it was set on. Frame 1 will end up with the name F_01.</p>
+<p><img src="timeline-markeradded.png" alt="A marker is set in timeline"></p>
+<h3>Render Images at Markers</h3>
+<p>From the Render menu, select &quot;Render Images at Markers&quot;.</p>
+<p><img src="renderimagesatmarkers.png" alt="Render menu &gt; Render Images at Markers"></p>
+<p>A new window will pop up showing the output location. If it is not correct, press the Esc key on the keyboard. Change the scene output properties and then go back to the Render menu and select &quot;Render Images at Markers&quot;.</p>
+<p><img src="rendermarkersdialog.png" alt="Output file location dialog window"></p>
+<p>After pressing OK, Blender will render the frames without a render preview window. Navigate to the output folder to see the images being saved.</p>
+<p><strong>The Blender render process can be stopped at any moment by pressing the Esc key on the keyboard.</strong></p>
+<p>When the render process is done, a new window will open to report that the render has finished. Moving the mouse away from that window will make it disappear.</p>
+<p><img src="renderimgmarkersfin.png" alt="Finished Rendering window"></p>
+<h3>Render Holding on Markers</h3>
+<p>This option is similar to the previous, but it will keep rendering the same frame until a new marker is reached in the timeline. If a marker is set on frame 1 and the next marker is on frame 5, the image of frame 1 will appear on frames 1 - 4. Frame 5 will get a new rendered image. The result is that playback of the frames will show a 'stepped' motion.</p>
+<p><img src="renderholdingonmarkers.png" alt="Render menu &gt; Render Holding on Markers"></p>
